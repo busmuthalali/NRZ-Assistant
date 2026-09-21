@@ -20,13 +20,28 @@ type StatsChannels = {
 
 async function ensureBotChannelAccess(
   channel: CategoryChannel | VoiceChannel,
-  botId: string
+  botId: string,
+  guild: Guild
 ): Promise<void> {
-  // Explicitly grant the bot access to the stats category/counters.
-  // This prevents "Missing Access" when the server/category has restrictive
-  // permission overwrites.
   const key = `${channel.id}:${botId}`;
   if (accessFixed.has(key)) return;
+
+  const me = guild.members.me;
+  if (!me) {
+    throw new Error(`[Stats] ${guild.name}: bot member is unavailable.`);
+  }
+
+  const permissions = channel.permissionsFor(me);
+  if (permissions?.has(PermissionFlagsBits.ViewChannel) && permissions.has(PermissionFlagsBits.ManageChannels)) {
+    accessFixed.add(key);
+    return;
+  }
+
+  if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    throw new Error(
+      `[Stats] ${guild.name}: bot cannot access ${channel.name}. Grant View Channel and Manage Channels on the stats category, or grant Manage Roles so the bot can repair its overwrite.`
+    );
+  }
 
   await channel.permissionOverwrites.edit(
     botId,
@@ -60,7 +75,7 @@ async function getOrCreateCategory(guild: Guild, botId: string): Promise<Categor
 
     console.log(`[Stats] Created category ${category.id} in ${guild.name}`);
   } else {
-    await ensureBotChannelAccess(category, botId);
+    await ensureBotChannelAccess(category, botId, guild);
   }
 
   return category;
@@ -105,7 +120,7 @@ export async function setupStats(guild: Guild): Promise<StatsChannels> {
   const category = await getOrCreateCategory(guild, me.id);
 
   // Make sure existing counters also explicitly grant access to the bot.
-  await ensureBotChannelAccess(category, me.id);
+  await ensureBotChannelAccess(category, me.id, guild);
 
   const children = [...guild.channels.cache.values()].filter(
     c => c.parentId === category.id
@@ -131,7 +146,7 @@ export async function setupStats(guild: Guild): Promise<StatsChannels> {
       `${MEMBER_PREFIX} 0`
     );
   } else {
-    await ensureBotChannelAccess(member, me.id);
+    await ensureBotChannelAccess(member, me.id, guild);
   }
 
   if (!online) {
@@ -142,7 +157,7 @@ export async function setupStats(guild: Guild): Promise<StatsChannels> {
       `${ONLINE_PREFIX} 0`
     );
   } else {
-    await ensureBotChannelAccess(online, me.id);
+    await ensureBotChannelAccess(online, me.id, guild);
   }
 
   // Remove counters from previous stats versions only.
