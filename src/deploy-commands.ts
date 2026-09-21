@@ -1,0 +1,1 @@
+import { deploy } from "./commands/deploy"; deploy().catch(console.error);

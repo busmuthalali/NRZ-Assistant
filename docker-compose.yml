@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gamingbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - gamingbot_pg:/var/lib/postgresql/data
+volumes:
+  gamingbot_pg:
