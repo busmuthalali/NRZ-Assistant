@@ -12,12 +12,11 @@
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
-    "pg": "^8.16.3"
+    "mongodb": "^6.20.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/node": "^24.5.0",
-    "@types/pg": "^8.15.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }

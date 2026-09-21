@@ -1,11 +1,11 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Interaction, PermissionFlagsBits } from "discord.js";
-import { query } from "../db/database";
+import { collection } from "../db/database";
 
 export async function createTicket(interaction: any) {
   if (!interaction.guild) return interaction.reply({ content: "Tickets can only be created inside a server.", ephemeral: true });
 
-  const existing = await query(`SELECT channel_id FROM tickets WHERE guild_id=$1 AND user_id=$2 AND status='open' LIMIT 1`, [interaction.guild.id, interaction.user.id]);
-  const existingChannel = existing.rows[0]?.channel_id ? interaction.guild.channels.cache.get(existing.rows[0].channel_id) : null;
+  const existing = await collection<{channel_id:string}>("tickets").findOne({guild_id:interaction.guild.id,user_id:interaction.user.id,status:"open"});
+  const existingChannel = existing?.channel_id ? interaction.guild.channels.cache.get(existing.channel_id) : null;
   if (existingChannel) return interaction.reply({ content: `You already have an open ticket: <#${existingChannel.id}>`, ephemeral: true });
 
   let category = interaction.guild.channels.cache.find((c: any) => c.type === ChannelType.GuildCategory && c.name === "🎫 TICKETS");
@@ -22,7 +22,7 @@ export async function createTicket(interaction: any) {
     ]
   });
 
-  await query(`INSERT INTO tickets(guild_id,channel_id,user_id) VALUES($1,$2,$3)`, [interaction.guild.id, channel.id, interaction.user.id]);
+  await collection("tickets").insertOne({guild_id:interaction.guild.id,channel_id:channel.id,user_id:interaction.user.id,status:"open",created_at:new Date()});
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId("ticket_close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger)
   );
@@ -33,7 +33,7 @@ export async function createTicket(interaction: any) {
 export async function handleTicketButton(interaction: Interaction) {
   if (!interaction.isButton() || interaction.customId !== "ticket_close") return false;
   if (!interaction.guild || !interaction.channel) return true;
-  await query(`UPDATE tickets SET status='closed', closed_at=NOW() WHERE guild_id=$1 AND channel_id=$2 AND status='open'`, [interaction.guild.id, interaction.channel.id]);
+  await collection("tickets").updateOne({guild_id:interaction.guild.id,channel_id:interaction.channel.id,status:"open"},{$set:{status:"closed",closed_at:new Date()}});
   await interaction.reply({ content: "🔒 Ticket closed. This channel will be deleted in 5 seconds." });
   setTimeout(() => interaction.channel?.delete("Ticket closed").catch(() => {}), 5000);
   return true;

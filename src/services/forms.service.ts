@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, Client, Interaction } from "discord.js";
-import { query } from "../db/database";
+import { collection } from "../db/database";
 
 export async function showApplication(interaction:Interaction) {
   if (!interaction.isChatInputCommand()) return;
@@ -14,7 +14,7 @@ export async function showApplication(interaction:Interaction) {
 export async function handleForm(interaction:Interaction, client:Client) {
   if (!interaction.isModalSubmit() || interaction.customId!=="form_application") return false;
   const data={name:interaction.fields.getTextInputValue("name"),reason:interaction.fields.getTextInputValue("reason"),experience:interaction.fields.getTextInputValue("experience")};
-  await query(`INSERT INTO forms(guild_id,type,user_id,data_json) VALUES($1,'application',$2,$3)`,[interaction.guildId,interaction.user.id,JSON.stringify(data)]);
+  await collection("forms").insertOne({guild_id:interaction.guildId,type:"application",user_id:interaction.user.id,data,status:"pending",created_at:new Date(),updated_at:new Date()});
   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId("form_accept").setLabel("Accept").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("form_deny").setLabel("Deny").setStyle(ButtonStyle.Danger)

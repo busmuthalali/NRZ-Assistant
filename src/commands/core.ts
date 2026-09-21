@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, EmbedBuilder } from "discord.js";
-import { query } from "../db/database";
+import { collection } from "../db/database";
 import { getLeaderboard, LeaderboardMetric, resetLeaderboard } from "../services/leaderboard.service";
 import { getFiveMInfo } from "../services/fivem.service";
 import { config } from "../config";
@@ -72,8 +72,8 @@ new SlashCommandBuilder().setName("voicestats").setDescription("Show voice activ
 export async function handleCommand(i:ChatInputCommandInteraction){switch(i.commandName){
 case"help":return i.reply({ephemeral:true,content:"🎮 Gaming Bot • Moderation • Logs • Voice • Live Leaderboards • Tickets • Forms • Honeypot"});
 case"stats":{const g=i.guild!;return i.reply(`👥 Members: **${g.memberCount}**\n🟢 Online: **${g.presences.cache.filter(p=>p.status!=="offline").size}**`);}
-case"warn":{const u=i.options.getUser("user",true),r=i.options.getString("reason",true);await query(`INSERT INTO warnings(guild_id,user_id,moderator_id,reason) VALUES($1,$2,$3,$4)`,[i.guildId,u.id,i.user.id,r]);return i.reply(`⚠️ <@${u.id}> warned. Reason: ${r}`);}
-case"warnings":{const u=i.options.getUser("user",true),r=await query(`SELECT reason,created_at FROM warnings WHERE guild_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 20`,[i.guildId,u.id]);return i.reply(r.rows.length?r.rows.map((x:any,n:number)=>`${n+1}. ${x.reason} — ${new Date(x.created_at).toLocaleString()}`).join("\n"):"No warnings.");}
+case"warn":{const u=i.options.getUser("user",true),r=i.options.getString("reason",true);await collection("warnings").insertOne({guild_id:i.guildId,user_id:u.id,moderator_id:i.user.id,reason:r,created_at:new Date()});return i.reply(`⚠️ <@${u.id}> warned. Reason: ${r}`);}
+case"warnings":{const u=i.options.getUser("user",true),r=await collection<{reason:string;created_at:Date}>("warnings").find({guild_id:i.guildId,user_id:u.id}).sort({created_at:-1}).limit(20).toArray();return i.reply(r.length?r.map((x,n)=>`${n+1}. ${x.reason} — ${new Date(x.created_at).toLocaleString()}`).join("\n"):"No warnings.");}
 case"clear":{const amount=i.options.getInteger("amount",true);if(!i.channel?.isTextBased()||!("bulkDelete"in i.channel))return i.reply({content:"This command requires a text channel.",ephemeral:true});const d=await(i.channel as any).bulkDelete(amount,true);return i.reply({content:`🧹 Deleted ${d.size} messages.`,ephemeral:true});}
 case"leaderboard":{await i.deferReply();const metric=i.options.getString("metric",true)as LeaderboardMetric;const payload=await buildLeaderboard(i.guild!,metric);const msg=await i.editReply(payload);const started=Date.now();const timer=setInterval(async()=>{if(Date.now()-started>=LIVE_REFRESH_DURATION_MS)return clearInterval(timer);try{await msg.edit(await buildLeaderboard(i.guild!,metric));}catch{clearInterval(timer);}},LIVE_REFRESH_MS);return;}
 case"leaderboard-reset":{const metric=i.options.getString("metric",true);if(metric==="all"){for(const m of ["voice","messages","xp","fivem"]as LeaderboardMetric[])await resetLeaderboard(i.guildId!,m);await resetActiveVoiceLeaderboard(i.guildId!);}else if(metric==="voice"){await resetActiveVoiceLeaderboard(i.guildId!);}else await resetLeaderboard(i.guildId!,metric as LeaderboardMetric);return i.reply({content:`♻️ **${metric}** leaderboard has been reset.`,ephemeral:true});}

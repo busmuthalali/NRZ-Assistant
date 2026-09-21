@@ -1,6 +1,6 @@
 import { Client, Events, VoiceState } from "discord.js";
 import { config } from "../config";
-import { query } from "../db/database";
+import { collection } from "../db/database";
 
 type Active = { joined:number; channelId:string; selfMute:boolean; selfDeaf:boolean; serverMute:boolean; serverDeaf:boolean; streaming:boolean; camera:boolean };
 const active = new Map<string, Active>();
@@ -9,13 +9,13 @@ const isIgnored=(id:string|null)=>!id || config.ignoreVoiceChannelIds.has(id);
 function snapshot(state:VoiceState):Active { return {joined:Date.now(),channelId:state.channelId!,selfMute:state.selfMute ?? false,selfDeaf:state.selfDeaf ?? false,serverMute:state.serverMute ?? false,serverDeaf:state.serverDeaf ?? false,streaming:state.streaming ?? false,camera:state.selfVideo ?? false}; }
 
 async function addVoice(guildId:string,userId:string,seconds:number) {
-  await query(`INSERT INTO activity_stats(guild_id,user_id,period_type,period_start,voice_seconds) VALUES($1,$2,'all','1970-01-01',$3) ON CONFLICT(guild_id,user_id,period_type,period_start) DO UPDATE SET voice_seconds=activity_stats.voice_seconds+$3,updated_at=NOW()`,[guildId,userId,seconds]);
+  await collection("activity_stats").updateOne({guild_id:guildId,user_id:userId,period_type:"all",period_start:"1970-01-01"},{$inc:{voice_seconds:seconds},$set:{updated_at:new Date()},$setOnInsert:{messages:0,xp:0,fivem_seconds:0}},{upsert:true});
 }
 async function persistSession(guildId:string,userId:string,s:Active) {
   const seconds=Math.max(0,Math.floor((Date.now()-s.joined)/1000));
   const counted=seconds;
   if(seconds<=0)return;
-  await query(`INSERT INTO voice_sessions(guild_id,user_id,channel_id,joined_at,left_at,duration_seconds,self_muted,self_deafened,server_muted,server_deafened,streaming,camera,counted_seconds) VALUES($1,$2,$3,TO_TIMESTAMP($4/1000.0),NOW(),$5,$6,$7,$8,$9,$10,$11,$12)`,[guildId,userId,s.channelId,s.joined,seconds,s.selfMute,s.selfDeaf,s.serverMute,s.serverDeaf,s.streaming,s.camera,counted]);
+  await collection("voice_sessions").insertOne({guild_id:guildId,user_id:userId,channel_id:s.channelId,joined_at:new Date(s.joined),left_at:new Date(),duration_seconds:seconds,self_muted:s.selfMute,self_deafened:s.selfDeaf,server_muted:s.serverMute,server_deafened:s.serverDeaf,streaming:s.streaming,camera:s.camera,counted_seconds:counted});
   if(counted) await addVoice(guildId,userId,counted);
 }
 
@@ -38,6 +38,6 @@ export async function seedActiveVoice(client:Client){
 export async function flushActiveVoice(){for(const [k,s] of active.entries()){const [g,u]=k.split(":");await persistSession(g,u,s).catch(e=>console.error("[Voice] shutdown save failed",e));}active.clear();}
 export function getActiveVoiceSeconds(guildId:string){const now=Date.now(),r=new Map<string,number>();for(const [k,s] of active){const [g,u]=k.split(":");if(g!==guildId)continue;r.set(u,(r.get(u)||0)+Math.max(0,Math.floor((now-s.joined)/1000)));}return r;}
 export function getActiveVoiceMembers(guildId:string){const now=Date.now();const out:{userId:string;channelId:string;joined:number;seconds:number;channelName?:string}[]=[];for(const [k,s] of active){const [g,u]=k.split(":");if(g===guildId)out.push({userId:u,channelId:s.channelId,joined:s.joined,seconds:Math.max(0,Math.floor((now-s.joined)/1000))});}return out;}
-export async function getVoiceStats(guildId:string,userId:string){const r=await query<{s:string}>(`SELECT COALESCE(SUM(counted_seconds),0)::text s FROM voice_sessions WHERE guild_id=$1 AND user_id=$2`,[guildId,userId]);const s=active.get(key(guildId,userId));return Number(r.rows[0]?.s||0)+(s?Math.max(0,Math.floor((Date.now()-s.joined)/1000)):0);}
-export async function resetActiveVoiceLeaderboard(guildId:string){const now=Date.now();for(const [k,s] of active){const [g]=k.split(":");if(g===guildId)s.joined=now;}await query(`DELETE FROM voice_sessions WHERE guild_id=$1`,[guildId]);await query(`UPDATE activity_stats SET voice_seconds=0,updated_at=NOW() WHERE guild_id=$1 AND period_type='all'`,[guildId]);}
+export async function getVoiceStats(guildId:string,userId:string){const r=await collection<{counted_seconds?:number}>("voice_sessions").aggregate([{ $match:{guild_id:guildId,user_id:userId} },{ $group:{_id:null,total:{$sum:"$counted_seconds"}}}]).toArray();const s=active.get(key(guildId,userId));return Number(r[0]?.total||0)+(s?Math.max(0,Math.floor((Date.now()-s.joined)/1000)):0);}
+export async function resetActiveVoiceLeaderboard(guildId:string){const now=Date.now();for(const [k,s] of active){const [g]=k.split(":");if(g===guildId)s.joined=now;}await collection("voice_sessions").deleteMany({guild_id:guildId});await collection("activity_stats").updateMany({guild_id:guildId,period_type:"all"},{$set:{voice_seconds:0,updated_at:new Date()}});}
 export function registerVoice(client:Client){client.on(Events.VoiceStateUpdate,(o,n)=>handleVoice(o,n).catch(console.error));client.once(Events.ClientReady,()=>seedActiveVoice(client).catch(console.error));}

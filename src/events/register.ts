@@ -4,7 +4,7 @@ import { alert } from "../services/alert.service";
 import { handleHoneypot } from "../services/honeypot.service";
 import { handleForm } from "../services/forms.service";
 import { handleTicketButton } from "../services/ticket.service";
-import { query } from "../db/database";
+import { collection } from "../db/database";
 import { config } from "../config";
 import { handleLeaderboardButton } from "../commands/core";
 
@@ -27,12 +27,12 @@ export function registerEvents(client:Client) {
   client.on(Events.MessageCreate, async m => {
     await handleHoneypot(client,m).catch(console.error);
     if (!m.guild || m.author.bot) return;
-    const last = await query(`SELECT last_message_at FROM xp_accounts WHERE guild_id=$1 AND user_id=$2`,[m.guild.id,m.author.id]).catch(()=>null);
-    const now=Date.now(), prev=last?.rows?.[0]?.last_message_at ? new Date(last.rows[0].last_message_at).getTime() : 0;
+    const last = await collection<{last_message_at?: Date}>("xp_accounts").findOne({guild_id:m.guild.id,user_id:m.author.id}).catch(()=>null);
+    const now=Date.now(), prev=last?.last_message_at ? new Date(last.last_message_at).getTime() : 0;
     if (now-prev < config.xpCooldownSeconds*1000) return;
     const xp=10;
-    await query(`INSERT INTO xp_accounts(guild_id,user_id,xp,last_message_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(guild_id,user_id) DO UPDATE SET xp=xp_accounts.xp+$3,last_message_at=NOW()`,[m.guild.id,m.author.id,xp]).catch(()=>{});
-    await query(`INSERT INTO activity_stats(guild_id,user_id,period_type,period_start,messages,xp) VALUES($1,$2,'all','1970-01-01',1,$3) ON CONFLICT(guild_id,user_id,period_type,period_start) DO UPDATE SET messages=activity_stats.messages+1,xp=activity_stats.xp+$3,updated_at=NOW()`,[m.guild.id,m.author.id,xp]).catch(()=>{});
+    await collection("xp_accounts").updateOne({guild_id:m.guild.id,user_id:m.author.id},{$inc:{xp},$set:{last_message_at:new Date()},$setOnInsert:{level:1}},{upsert:true}).catch(()=>{});
+    await collection("activity_stats").updateOne({guild_id:m.guild.id,user_id:m.author.id,period_type:"all",period_start:"1970-01-01"},{$inc:{messages:1,xp},$set:{updated_at:new Date()},$setOnInsert:{voice_seconds:0,fivem_seconds:0}},{upsert:true}).catch(()=>{});
   });
   client.on(Events.MessageDelete, async m => { if (m.guild) await logEvent(client,m.guild.id,"MESSAGE_DELETE",{targetId:m.author?.id,channelId:m.channel.id,description:`Message deleted in <#${m.channel.id}>.`}); });
   client.on(Events.ChannelCreate, async c => { if ("guild" in c) await logEvent(client,c.guild.id,"CHANNEL_CREATE",{channelId:c.id,description:`Channel created: ${c.name}`}); });
@@ -52,7 +52,7 @@ export function registerEvents(client:Client) {
     if (i.isButton()) await handleTicketButton(i).catch(console.error);
     if (i.isButton() && ["form_accept","form_deny"].includes(i.customId)) {
       const status=i.customId==="form_accept"?"accepted":"denied";
-      await query(`UPDATE forms SET status=$1,reviewer_id=$2,updated_at=NOW() WHERE id=(SELECT id FROM forms WHERE guild_id=$3 AND status='pending' ORDER BY created_at DESC LIMIT 1)`,[status,i.user.id,i.guildId]).catch(async()=>{});
+      await collection("forms").findOneAndUpdate({guild_id:i.guildId,status:"pending"},{$set:{status,reviewer_id:i.user.id,updated_at:new Date()}},{sort:{created_at:-1}}).catch(async()=>{});
       if (!i.replied) await i.reply({content:`Form marked **${status}** by <@${i.user.id}>.`});
     }
   });

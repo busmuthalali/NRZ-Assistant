@@ -8,7 +8,7 @@ import { handleCommand } from "./commands/core";
 import { startDashboard } from "./web/dashboard";
 
 async function main() {
-  if (!config.databaseUrl) throw new Error("DATABASE_URL is not configured. Create a .env file from .env.example.");
+  if (!config.databaseUrl) throw new Error("MONGODB_URI is not configured. Create a .env file from .env.example.");
   await initDb();
   const client=new Client({
     intents:[

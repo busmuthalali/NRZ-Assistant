@@ -1,17 +1,12 @@
 import { EmbedBuilder, Client, TextChannel } from "discord.js";
 import { config } from "../config";
-import { query } from "../db/database";
+import { collection } from "../db/database";
 
 export async function logEvent(client: Client, guildId: string, type: string, data: {
   actorId?: string; targetId?: string; channelId?: string; description?: string; fields?: Record<string,string>;
 }) {
   try {
-    await query(
-      `INSERT INTO audit_logs(guild_id,event_type,actor_id,target_id,channel_id,data_json)
-       VALUES($1,$2,$3,$4,$5,$6)`,
-      [guildId,type,data.actorId ?? null,data.targetId ?? null,data.channelId ?? null,
-       JSON.stringify(data.fields ?? {})]
-    );
+    await collection("audit_logs").insertOne({guild_id:guildId,event_type:type,actor_id:data.actorId ?? null,target_id:data.targetId ?? null,channel_id:data.channelId ?? null,data:data.fields ?? {},created_at:new Date()});
   } catch {}
 
   const id = config.logChannelId;
