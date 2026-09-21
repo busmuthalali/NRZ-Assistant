@@ -5,6 +5,7 @@ import { registerEvents } from "./events/register";
 import { registerVoice, flushActiveVoice } from "./services/voice.service";
 import { startStats } from "./services/stats.service";
 import { handleCommand } from "./commands/core";
+import { deploy } from "./commands/deploy";
 import { startDashboard } from "./web/dashboard";
 
 async function main() {
@@ -24,6 +25,7 @@ async function main() {
 
   client.once(Events.ClientReady, async c => {
     console.log(`Logged in as ${c.user.tag}`);
+    await deploy().catch(error => console.error("[Commands] Registration failed:", error));
     startStats(client);
   });
 
