@@ -5,12 +5,22 @@ import { getActiveVoiceSeconds, getActiveVoiceMembers } from "./voice.service";
 export type LeaderboardMetric = "voice" | "messages" | "xp" | "fivem";
 export type LeaderboardEntry = { userId: string; value: number; member: GuildMember; activeChannel?: string };
 
+const memberFetches = new WeakMap<Guild, Promise<unknown>>();
+
 const columns: Record<LeaderboardMetric, string> = {
   voice: "voice_seconds", messages: "messages", xp: "xp", fivem: "fivem_seconds"
 };
 
 export async function getLeaderboard(guild: Guild, metric: LeaderboardMetric): Promise<LeaderboardEntry[]> {
-  await guild.members.fetch();
+  let memberFetch = memberFetches.get(guild);
+  if (!memberFetch) {
+    memberFetch = guild.members.fetch().catch(error => {
+      memberFetches.delete(guild);
+      throw error;
+    });
+    memberFetches.set(guild, memberFetch);
+  }
+  await memberFetch;
   const members = [...guild.members.cache.values()].filter(m => !m.user.bot);
   const col = columns[metric];
   const result = await collection<{user_id:string;[key:string]:unknown}>("activity_stats").find({guild_id:guild.id,period_type:"all"}).toArray();
