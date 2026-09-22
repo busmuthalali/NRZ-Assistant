@@ -1,6 +1,5 @@
 import { Client, Events } from "discord.js";
 import { logEvent } from "../services/logger.service";
-import { alert } from "../services/alert.service";
 import { handleHoneypot } from "../services/honeypot.service";
 import { handleForm } from "../services/forms.service";
 import { handleTicketButton } from "../services/ticket.service";
@@ -10,7 +9,6 @@ import { config } from "../config";
 export function registerEvents(client:Client) {
   client.on(Events.GuildMemberAdd, async m => {
     await logEvent(client,m.guild.id,"MEMBER_JOIN",{targetId:m.id,description:`${m.user.tag} joined.`});
-    await alert(client,"🟢 Member Joined",`${m.user.tag} joined the server.`);
   });
   client.on(Events.GuildMemberRemove, async m => {
     await logEvent(client,m.guild.id,"MEMBER_LEAVE",{

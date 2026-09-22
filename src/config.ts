@@ -11,7 +11,6 @@ export const config = {
   port: Number(process.env.PORT ?? 3000),
   fivemUrl: process.env.FIVEM_SERVER_URL ?? "",
   logChannelId: process.env.LOG_CHANNEL_ID ?? "",
-  alertChannelId: process.env.ALERT_CHANNEL_ID ?? "",
   freeGamesChannelId: process.env.FREE_GAMES_CHANNEL_ID ?? "",
   honeypotChannelId: process.env.HONEYPOT_CHANNEL_ID ?? "",
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID ?? "",
