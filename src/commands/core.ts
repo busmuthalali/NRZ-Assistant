@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, EmbedBuilder } from "discord.js";
 import { collection } from "../db/database";
 import { getLeaderboard, LeaderboardMetric, resetLeaderboard } from "../services/leaderboard.service";
 import { getFiveMInfo } from "../services/fivem.service";
@@ -8,7 +8,7 @@ import { createTicket } from "../services/ticket.service";
 import { setHoneypotChannel } from "../services/honeypot.service";
 import { getVoiceStats, getActiveVoiceMembers, resetActiveVoiceLeaderboard } from "../services/voice.service";
 
-const LIVE_REFRESH_MS=30000; const LIVE_REFRESH_DURATION_MS=10*60*1000;
+const VOICE_LEADERBOARD_REFRESH_MS=60*1000;
 const labels:Record<LeaderboardMetric,string>={voice:"Voice Activity",messages:"Messages",xp:"XP",fivem:"FiveM Time"};
 const fmt=(s:number)=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;return `${h}h ${m}m ${sec}s`;};
 const roles=(m:any)=>{const names=[...m.roles.cache.values()].map((r:any)=>String(r.name).toLowerCase());return {nrz:names.includes("nrz"),verified:names.includes("verified")};};
@@ -53,10 +53,7 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric){
   if(description.length>5800) description=description.slice(0,5750)+"\n\n⚠️ Discord's embed limit was reached; some entries cannot fit on one message.";
 
   return {
-    embeds:[new EmbedBuilder().setTitle(`${labels[metric]} Leaderboard`).setDescription(description)],
-    components:[new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`lb_refresh:${metric}`).setLabel("↻ Refresh").setStyle(ButtonStyle.Primary)
-    )]
+    embeds:[new EmbedBuilder().setTitle(`${labels[metric]} Leaderboard`).setDescription(description)]
   };
 }
 
@@ -75,7 +72,7 @@ case"stats":{const g=i.guild!;return i.reply(`👥 Members: **${g.memberCount}**
 case"warn":{const u=i.options.getUser("user",true),r=i.options.getString("reason",true);await collection("warnings").insertOne({guild_id:i.guildId,user_id:u.id,moderator_id:i.user.id,reason:r,created_at:new Date()});return i.reply(`⚠️ <@${u.id}> warned. Reason: ${r}`);}
 case"warnings":{const u=i.options.getUser("user",true),r=await collection<{reason:string;created_at:Date}>("warnings").find({guild_id:i.guildId,user_id:u.id}).sort({created_at:-1}).limit(20).toArray();return i.reply(r.length?r.map((x,n)=>`${n+1}. ${x.reason} — ${new Date(x.created_at).toLocaleString()}`).join("\n"):"No warnings.");}
 case"clear":{const amount=i.options.getInteger("amount",true);if(!i.channel?.isTextBased()||!("bulkDelete"in i.channel))return i.reply({content:"This command requires a text channel.",ephemeral:true});const d=await(i.channel as any).bulkDelete(amount,true);return i.reply({content:`🧹 Deleted ${d.size} messages.`,ephemeral:true});}
-case"leaderboard":{await i.deferReply();const metric=i.options.getString("metric",true)as LeaderboardMetric;const payload=await buildLeaderboard(i.guild!,metric);const msg=await i.editReply(payload);const started=Date.now();const timer=setInterval(async()=>{if(Date.now()-started>=LIVE_REFRESH_DURATION_MS)return clearInterval(timer);try{await msg.edit(await buildLeaderboard(i.guild!,metric));}catch{clearInterval(timer);}},LIVE_REFRESH_MS);return;}
+case"leaderboard":{await i.deferReply();const metric=i.options.getString("metric",true)as LeaderboardMetric;const payload=await buildLeaderboard(i.guild!,metric);const msg=await i.editReply(payload);if(metric==="voice"){const timer=setInterval(async()=>{try{await msg.edit(await buildLeaderboard(i.guild!,metric));}catch{clearInterval(timer);}},VOICE_LEADERBOARD_REFRESH_MS);}return;}
 case"leaderboard-reset":{const metric=i.options.getString("metric",true);if(metric==="all"){for(const m of ["voice","messages","xp","fivem"]as LeaderboardMetric[])await resetLeaderboard(i.guildId!,m);await resetActiveVoiceLeaderboard(i.guildId!);}else if(metric==="voice"){await resetActiveVoiceLeaderboard(i.guildId!);}else await resetLeaderboard(i.guildId!,metric as LeaderboardMetric);return i.reply({content:`♻️ **${metric}** leaderboard has been reset.`,ephemeral:true});}
 case"voicestats":{await i.deferReply({ephemeral:true});const u=i.options.getUser("user")??i.user,s=await getVoiceStats(i.guildId!,u.id);return i.editReply(`🎙️ <@${u.id}> voice time: **${fmt(s)}**`);}
 case"apply":return showApplication(i);case"ticket":return createTicket(i);case"setup-honeypot":await setHoneypotChannel(i.guildId!,i.channelId);return i.reply({content:`🍯 <#${i.channelId}> is now the honeypot channel.`,ephemeral:true});
@@ -83,4 +80,3 @@ case"serverstatus":{await i.deferReply();const f=await getFiveMInfo(config.fivem
 case"players":{await i.deferReply();const f=await getFiveMInfo(config.fivemUrl);return i.editReply(f?`🎮 Players online: **${f.count}**\n${f.players.slice(0,30).map((p:any)=>`• ${p.name??"Unknown"}`).join("\n")||"None"}`:"🔴 FiveM server unavailable");}
 default:return;}}
 
-export async function handleLeaderboardButton(i:ButtonInteraction){const [action,metric]=i.customId.split(":");if(action!=="lb_refresh"||!["voice","messages","xp","fivem"].includes(metric)||!i.guild)return false;await i.deferUpdate();await i.editReply(await buildLeaderboard(i.guild,metric as LeaderboardMetric));return true;}

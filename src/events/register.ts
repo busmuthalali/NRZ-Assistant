@@ -6,7 +6,6 @@ import { handleForm } from "../services/forms.service";
 import { handleTicketButton } from "../services/ticket.service";
 import { collection } from "../db/database";
 import { config } from "../config";
-import { handleLeaderboardButton } from "../commands/core";
 
 export function registerEvents(client:Client) {
   client.on(Events.GuildMemberAdd, async m => {
@@ -42,13 +41,6 @@ export function registerEvents(client:Client) {
   client.on(Events.VoiceStateUpdate, async (o,n) => { if (n.guild) await logEvent(client,n.guild.id,"VOICE_UPDATE",{targetId:n.id,channelId:n.channelId ?? o.channelId ?? undefined,description:`Voice state changed for <@${n.id}>.`}); });
   client.on(Events.InteractionCreate, async i => {
     if (i.isModalSubmit()) await handleForm(i,client).catch(console.error);
-    if (i.isButton() && i.customId.startsWith("lb_")) {
-      await handleLeaderboardButton(i).catch(async err => {
-        console.error(err);
-        if (!i.replied && !i.deferred) await i.reply({content:"Could not refresh the leaderboard.",ephemeral:true}).catch(()=>{});
-      });
-      return;
-    }
     if (i.isButton()) await handleTicketButton(i).catch(console.error);
     if (i.isButton() && ["form_accept","form_deny"].includes(i.customId)) {
       const status=i.customId==="form_accept"?"accepted":"denied";
