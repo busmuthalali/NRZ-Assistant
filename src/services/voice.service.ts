@@ -1,4 +1,4 @@
-import { Client, Events, VoiceState } from "discord.js";
+import { Client, Events, Guild, VoiceState } from "discord.js";
 import { config } from "../config";
 import { collection } from "../db/database";
 
@@ -34,6 +34,16 @@ export async function seedActiveVoice(client:Client){
   active.clear();
   for(const guild of client.guilds.cache.values()) for(const state of guild.voiceStates.cache.values()) if(state.channelId&&!isIgnored(state.channelId)&&!state.member?.user.bot) active.set(key(guild.id,state.id),snapshot(state));
   console.log(`[Voice] Tracking ${active.size} active voice sessions.`);
+}
+export function syncActiveVoice(guild:Guild){
+  for(const state of guild.voiceStates.cache.values()){
+    const k=key(guild.id,state.id);
+    if(state.channelId&&!isIgnored(state.channelId)&&!state.member?.user.bot){
+      const current=active.get(k);
+      if(current) current.channelId=state.channelId;
+      else active.set(k,snapshot(state));
+    }else active.delete(k);
+  }
 }
 export async function flushActiveVoice(){for(const [k,s] of active.entries()){const [g,u]=k.split(":");await persistSession(g,u,s).catch(e=>console.error("[Voice] shutdown save failed",e));}active.clear();}
 export function getActiveVoiceSeconds(guildId:string){const now=Date.now(),r=new Map<string,number>();for(const [k,s] of active){const [g,u]=k.split(":");if(g!==guildId)continue;r.set(u,(r.get(u)||0)+Math.max(0,Math.floor((now-s.joined)/1000)));}return r;}
