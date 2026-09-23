@@ -36,13 +36,25 @@ export async function seedActiveVoice(client:Client){
   console.log(`[Voice] Tracking ${active.size} active voice sessions.`);
 }
 export function syncActiveVoice(guild:Guild){
+  const currentKeys=new Set<string>();
   for(const state of guild.voiceStates.cache.values()){
     const k=key(guild.id,state.id);
     if(state.channelId&&!isIgnored(state.channelId)&&!state.member?.user.bot){
-      const current=active.get(k);
-      if(current) current.channelId=state.channelId;
-      else active.set(k,snapshot(state));
-    }else active.delete(k);
+      currentKeys.add(k);
+      const session=active.get(k);
+      if(session) {
+        session.channelId=state.channelId;
+        session.selfMute=state.selfMute ?? false;
+        session.selfDeaf=state.selfDeaf ?? false;
+        session.serverMute=state.serverMute ?? false;
+        session.serverDeaf=state.serverDeaf ?? false;
+        session.streaming=state.streaming ?? false;
+        session.camera=state.selfVideo ?? false;
+      } else active.set(k,snapshot(state));
+    }
+  }
+  for(const k of active.keys()){
+    if(k.startsWith(`${guild.id}:`)&&!currentKeys.has(k)) active.delete(k);
   }
 }
 export async function flushActiveVoice(){for(const [k,s] of active.entries()){const [g,u]=k.split(":");await persistSession(g,u,s).catch(e=>console.error("[Voice] shutdown save failed",e));}active.clear();}
