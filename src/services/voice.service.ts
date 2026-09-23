@@ -4,9 +4,19 @@ import { collection } from "../db/database";
 
 type Active = { joined:number; channelId:string; selfMute:boolean; selfDeaf:boolean; serverMute:boolean; serverDeaf:boolean; streaming:boolean; camera:boolean };
 const active = new Map<string, Active>();
+const activityListeners = new Set<(guild:Guild) => void | Promise<void>>();
 const key=(g:string,u:string)=>`${g}:${u}`;
 const isIgnored=(id:string|null)=>!id || config.ignoreVoiceChannelIds.has(id);
 function snapshot(state:VoiceState):Active { return {joined:Date.now(),channelId:state.channelId!,selfMute:state.selfMute ?? false,selfDeaf:state.selfDeaf ?? false,serverMute:state.serverMute ?? false,serverDeaf:state.serverDeaf ?? false,streaming:state.streaming ?? false,camera:state.selfVideo ?? false}; }
+
+export function onVoiceActivity(listener:(guild:Guild) => void | Promise<void>) {
+  activityListeners.add(listener);
+  return () => activityListeners.delete(listener);
+}
+
+function notifyVoiceActivity(guild:Guild) {
+  for(const listener of activityListeners) void Promise.resolve(listener(guild)).catch(error=>console.error("[Voice] activity refresh failed",error));
+}
 
 async function addVoice(guildId:string,userId:string,seconds:number) {
   await collection("activity_stats").updateOne({guild_id:guildId,user_id:userId,period_type:"all",period_start:"1970-01-01"},{$inc:{voice_seconds:seconds},$set:{updated_at:new Date()},$setOnInsert:{messages:0,xp:0,fivem_seconds:0}},{upsert:true});
@@ -25,9 +35,11 @@ export async function handleVoice(oldState:VoiceState,newState:VoiceState){
   if(oldC && oldC!==newC){const s=active.get(k);if(s){await persistSession(g,u,s).catch(e=>console.error("[Voice] save failed",e));active.delete(k);}}
   if(newC && !isIgnored(newC)){
     const s=active.get(k); if(!s) active.set(k,snapshot(newState)); else {s.channelId=newC;s.selfMute=newState.selfMute ?? false;s.selfDeaf=newState.selfDeaf ?? false;s.serverMute=newState.serverMute ?? false;s.serverDeaf=newState.serverDeaf ?? false;s.streaming=newState.streaming ?? false;s.camera=newState.selfVideo ?? false;}
+    notifyVoiceActivity(newState.guild);
     return;
   }
   active.delete(k);
+  notifyVoiceActivity(newState.guild);
 }
 
 export async function seedActiveVoice(client:Client){
