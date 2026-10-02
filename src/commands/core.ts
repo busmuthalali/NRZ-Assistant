@@ -43,20 +43,17 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
     return `• <@${x.userId}> — 🎙️ ${channel ? channel.name : `<#${x.channelId}>`} — **${fmt(x.seconds)}**`;
   });
 
-  const sections:string[]=[];
-  const addSection=(title:string,arr:any[])=>{
-    if(!arr.length)return;
-    sections.push(`### ${title}\n${lines(arr).join("\n")}`);
+  const roleEmbed=(title:string,members:any[])=>{
+    let description=members.length?lines(members).join("\n"):"No members found.";
+    const limitNotice="\n\n⚠️ Some entries were omitted because the embed limit was reached.";
+    if(description.length>4096) description=description.slice(0,4096-limitNotice.length)+limitNotice;
+    return new EmbedBuilder().setTitle(`${labels[metric]} - ${title}`).setDescription(description);
   };
-  addSection("🟥 NRZ Members",nrz);
-  addSection("🟩 Verified Members",verified);
 
-  let description=sections.join("\n\n");
-  if(!description) description="No NRZ or Verified members found.";
-  const limitNotice="\n\n⚠️ Some entries were omitted because the embed limit was reached.";
-  if(description.length>4096) description=description.slice(0,4096-limitNotice.length)+limitNotice;
-
-  const embeds=[new EmbedBuilder().setTitle(`${labels[metric]} Leaderboard`).setDescription(description)];
+  const embeds=[
+    roleEmbed("🟥 NRZ Members",nrz),
+    roleEmbed("🟩 Verified Members",verified)
+  ];
   if(metric==="voice"&&activeLines.length){
     let activeDescription=activeLines.join("\n");
     if(activeDescription.length>4096) activeDescription=activeDescription.slice(0,4090)+"\n…";
