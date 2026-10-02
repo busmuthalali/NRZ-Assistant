@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, EmbedBuilder, Message } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, EmbedBuilder, Message, Guild } from "discord.js";
 import { collection } from "../db/database";
 import { getLeaderboard, LeaderboardMetric, resetLeaderboard } from "../services/leaderboard.service";
 import { getFiveMInfo } from "../services/fivem.service";
@@ -59,7 +59,7 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric){
   };
 }
 
-onVoiceActivity(async guild=>{
+export async function refreshVoiceLeaderboards(guild:Guild){
   const messages=liveVoiceLeaderboards.get(guild.id);
   if(!messages?.size)return;
   const payload=await buildLeaderboard(guild,"voice");
@@ -71,7 +71,9 @@ onVoiceActivity(async guild=>{
     }
   }));
   if(!messages.size)liveVoiceLeaderboards.delete(guild.id);
-});
+}
+
+onVoiceActivity(refreshVoiceLeaderboards);
 
 export const commands=[
 new SlashCommandBuilder().setName("help").setDescription("Show bot features"),new SlashCommandBuilder().setName("stats").setDescription("Show server statistics"),

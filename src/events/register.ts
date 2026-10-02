@@ -5,12 +5,21 @@ import { handleForm } from "../services/forms.service";
 import { handleTicketButton } from "../services/ticket.service";
 import { collection } from "../db/database";
 import { config } from "../config";
+import { refreshVoiceLeaderboards } from "../commands/core";
+
+function refreshVoiceLeaderboard(guild: import("discord.js").Guild) {
+  void refreshVoiceLeaderboards(guild).catch(error =>
+    console.error("[Voice] member update leaderboard refresh failed", error)
+  );
+}
 
 export function registerEvents(client:Client) {
   client.on(Events.GuildMemberAdd, async m => {
+    refreshVoiceLeaderboard(m.guild);
     await logEvent(client,m.guild.id,"MEMBER_JOIN",{targetId:m.id,description:`${m.user.tag} joined.`});
   });
   client.on(Events.GuildMemberRemove, async m => {
+    refreshVoiceLeaderboard(m.guild);
     await logEvent(client,m.guild.id,"MEMBER_LEAVE",{
       targetId:m.id,
       description:`${m.user.tag} left the server.`
@@ -18,6 +27,9 @@ export function registerEvents(client:Client) {
   });
   client.on(Events.GuildBanAdd, async b => { await logEvent(client,b.guild.id,"BAN",{targetId:b.user.id,description:`${b.user.tag} was banned.`}); });
   client.on(Events.GuildMemberUpdate, async (oldM,newM) => {
+    const rolesChanged = oldM.roles.cache.size !== newM.roles.cache.size ||
+      [...oldM.roles.cache.keys()].some(roleId => !newM.roles.cache.has(roleId));
+    if (rolesChanged) refreshVoiceLeaderboard(newM.guild);
     if (oldM.nickname!==newM.nickname) await logEvent(client,newM.guild.id,"NICKNAME_CHANGE",{targetId:newM.id,description:`${oldM.nickname ?? oldM.user.username} → ${newM.nickname ?? newM.user.username}`});
     if (oldM.roles.cache.size!==newM.roles.cache.size) await logEvent(client,newM.guild.id,"ROLE_CHANGE",{targetId:newM.id,description:`Roles changed for ${newM.user.tag}.`});
   });
