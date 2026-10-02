@@ -11,7 +11,7 @@ const columns: Record<LeaderboardMetric, string> = {
   voice: "voice_seconds", messages: "messages", xp: "xp", fivem: "fivem_seconds"
 };
 
-export async function getLeaderboard(guild: Guild, metric: LeaderboardMetric): Promise<LeaderboardEntry[]> {
+export async function getLeaderboard(guild: Guild, metric: LeaderboardMetric, refreshMemberIds: string[] = []): Promise<LeaderboardEntry[]> {
   let memberFetch = memberFetches.get(guild);
   if (!memberFetch) {
     memberFetch = guild.members.fetch().catch(error => {
@@ -21,6 +21,7 @@ export async function getLeaderboard(guild: Guild, metric: LeaderboardMetric): P
     memberFetches.set(guild, memberFetch);
   }
   await memberFetch;
+  await Promise.all(refreshMemberIds.map(user => guild.members.fetch({ user, force: true })));
   const members = [...guild.members.cache.values()].filter(m => !m.user.bot);
   const col = columns[metric];
   const result = await collection<{user_id:string;[key:string]:unknown}>("activity_stats").find({guild_id:guild.id,period_type:"all"}).toArray();

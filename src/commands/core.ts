@@ -14,9 +14,9 @@ const labels:Record<LeaderboardMetric,string>={voice:"Voice Activity",messages:"
 const fmt=(s:number)=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;return `${h}h ${m}m ${sec}s`;};
 const roles=(m:any)=>{const names=[...m.roles.cache.values()].map((r:any)=>String(r.name).toLowerCase());return {nrz:names.includes("nrz"),verified:names.includes("verified")};};
 
-async function buildLeaderboard(guild:any,metric:LeaderboardMetric){
+async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMemberIds:string[]=[]){
   if(metric==="voice") syncActiveVoice(guild);
-  const entries=await getLeaderboard(guild,metric);
+  const entries=await getLeaderboard(guild,metric,refreshMemberIds);
   const active=getActiveVoiceMembers(guild.id);
   const activeMap=new Map(active.map(x=>[x.userId,x]));
 
@@ -59,10 +59,10 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric){
   };
 }
 
-export async function refreshVoiceLeaderboards(guild:Guild){
+export async function refreshVoiceLeaderboards(guild:Guild,refreshMemberIds:string[]=[]){
   const messages=liveVoiceLeaderboards.get(guild.id);
   if(!messages?.size)return;
-  const payload=await buildLeaderboard(guild,"voice");
+  const payload=await buildLeaderboard(guild,"voice",refreshMemberIds);
   await Promise.all([...messages].map(async message=>{
     try { await message.edit(payload); }
     catch(error) {
