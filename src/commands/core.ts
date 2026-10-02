@@ -38,13 +38,12 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
     return `**${i+1}.** <@${e.userId}> — **${metric==='voice'||metric==='fivem'?fmt(e.value):e.value.toLocaleString()}**${activeText}`;
   });
 
-  const sections:string[]=[];
   const activeLines=active.map(x=>{
     const channel=guild.channels.cache.get(x.channelId);
     return `• <@${x.userId}> — 🎙️ ${channel ? channel.name : `<#${x.channelId}>`} — **${fmt(x.seconds)}**`;
   });
-  if(activeLines.length) sections.push(`### 🔊 Currently Connected to Voice\n${activeLines.join("\n")}`);
 
+  const sections:string[]=[];
   const addSection=(title:string,arr:any[])=>{
     if(!arr.length)return;
     sections.push(`### ${title}\n${lines(arr).join("\n")}`);
@@ -54,14 +53,17 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
 
   let description=sections.join("\n\n");
   if(!description) description="No NRZ or Verified members found.";
-  const limitNotice="\n\n⚠️ Discord's embed limit was reached; some entries cannot fit on one message.";
-  if(description.length>4096){
-    const truncated=description.slice(0,4096-limitNotice.length);
-    description=truncated.slice(0,truncated.lastIndexOf("\n"))+limitNotice;
-  }
+  const limitNotice="\n\n⚠️ Some entries were omitted because the embed limit was reached.";
+  if(description.length>4096) description=description.slice(0,4096-limitNotice.length)+limitNotice;
 
+  const embeds=[new EmbedBuilder().setTitle(`${labels[metric]} Leaderboard`).setDescription(description)];
+  if(metric==="voice"&&activeLines.length){
+    let activeDescription=activeLines.join("\n");
+    if(activeDescription.length>4096) activeDescription=activeDescription.slice(0,4090)+"\n…";
+    embeds.push(new EmbedBuilder().setTitle("🔊 Currently Connected to Voice").setDescription(activeDescription));
+  }
   return {
-    embeds:[new EmbedBuilder().setTitle(`${labels[metric]} Leaderboard`).setDescription(description)]
+    embeds
   };
 }
 
