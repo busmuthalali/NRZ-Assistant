@@ -39,6 +39,12 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
   });
 
   const sections:string[]=[];
+  const activeLines=active.map(x=>{
+    const channel=guild.channels.cache.get(x.channelId);
+    return `• <@${x.userId}> — 🎙️ ${channel ? channel.name : `<#${x.channelId}>`} — **${fmt(x.seconds)}**`;
+  });
+  if(activeLines.length) sections.push(`### 🔊 Currently Connected to Voice\n${activeLines.join("\n")}`);
+
   const addSection=(title:string,arr:any[])=>{
     if(!arr.length)return;
     sections.push(`### ${title}\n${lines(arr).join("\n")}`);
@@ -46,15 +52,13 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
   addSection("🟥 NRZ Members",nrz);
   addSection("🟩 Verified Members",verified);
 
-  const activeLines=active.map(x=>{
-    const channel=guild.channels.cache.get(x.channelId);
-    return `• <@${x.userId}> — 🎙️ ${channel ? channel.name : `<#${x.channelId}>`} — **${fmt(x.seconds)}**`;
-  });
-  if(activeLines.length) sections.push(`### 🔊 Currently Connected to Voice\n${activeLines.join("\n")}`);
-
   let description=sections.join("\n\n");
   if(!description) description="No NRZ or Verified members found.";
-  if(description.length>5800) description=description.slice(0,5750)+"\n\n⚠️ Discord's embed limit was reached; some entries cannot fit on one message.";
+  const limitNotice="\n\n⚠️ Discord's embed limit was reached; some entries cannot fit on one message.";
+  if(description.length>4096){
+    const truncated=description.slice(0,4096-limitNotice.length);
+    description=truncated.slice(0,truncated.lastIndexOf("\n"))+limitNotice;
+  }
 
   return {
     embeds:[new EmbedBuilder().setTitle(`${labels[metric]} Leaderboard`).setDescription(description)]
@@ -112,6 +116,19 @@ async function trackLiveVoiceLeaderboard(guild:Guild,message:Message,persist=tru
 
 export async function restoreVoiceLeaderboards(client:Client){
   const records=await collection<LiveVoiceLeaderboardRecord>("live_voice_leaderboards").find({}).toArray();
+  for(const guild of client.guilds.cache.values()){
+    if(records.some(record=>record.guild_id===guild.id))continue;
+    for(const channel of guild.channels.cache.values()){
+      if(!channel.isTextBased()||!("messages" in channel))continue;
+      const recent=await channel.messages.fetch({limit:100}).catch(()=>null);
+      if(!recent)continue;
+      const previousMessages=recent.filter(message=>
+        message.author.id===client.user?.id&&
+        message.embeds.some(embed=>embed.title==="Voice Activity Leaderboard")
+      );
+      for(const message of previousMessages.values())await trackLiveVoiceLeaderboard(guild,message);
+    }
+  }
   for(const record of records){
     const guild=client.guilds.cache.get(record.guild_id);
     if(!guild){

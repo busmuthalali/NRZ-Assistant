@@ -21,12 +21,27 @@ function notifyVoiceActivity(guild:Guild) {
 async function addVoice(guildId:string,userId:string,seconds:number) {
   await collection("activity_stats").updateOne({guild_id:guildId,user_id:userId,period_type:"all",period_start:"1970-01-01"},{$inc:{voice_seconds:seconds},$set:{updated_at:new Date()},$setOnInsert:{messages:0,xp:0,fivem_seconds:0}},{upsert:true});
 }
-async function persistSession(guildId:string,userId:string,s:Active) {
-  const seconds=Math.max(0,Math.floor((Date.now()-s.joined)/1000));
+async function persistSession(guildId:string,userId:string,s:Active,endedAt=Date.now()) {
+  const seconds=Math.max(0,Math.floor((endedAt-s.joined)/1000));
   const counted=seconds;
   if(seconds<=0)return;
-  await collection("voice_sessions").insertOne({guild_id:guildId,user_id:userId,channel_id:s.channelId,joined_at:new Date(s.joined),left_at:new Date(),duration_seconds:seconds,self_muted:s.selfMute,self_deafened:s.selfDeaf,server_muted:s.serverMute,server_deafened:s.serverDeaf,streaming:s.streaming,camera:s.camera,counted_seconds:counted});
+  await collection("voice_sessions").insertOne({guild_id:guildId,user_id:userId,channel_id:s.channelId,joined_at:new Date(s.joined),left_at:new Date(endedAt),duration_seconds:seconds,self_muted:s.selfMute,self_deafened:s.selfDeaf,server_muted:s.serverMute,server_deafened:s.serverDeaf,streaming:s.streaming,camera:s.camera,counted_seconds:counted});
   if(counted) await addVoice(guildId,userId,counted);
+}
+
+export async function checkpointActiveVoice(){
+  for(const [sessionKey,session] of active){
+    const now=Date.now();
+    const seconds=Math.floor((now-session.joined)/1000);
+    if(seconds<=0)continue;
+    const [guildId,userId]=sessionKey.split(":");
+    try {
+      await persistSession(guildId,userId,session,now);
+      session.joined+=seconds*1000;
+    } catch(error) {
+      console.error("[Voice] activity checkpoint failed",error);
+    }
+  }
 }
 
 export async function handleVoice(oldState:VoiceState,newState:VoiceState){
@@ -74,4 +89,4 @@ export function getActiveVoiceSeconds(guildId:string){const now=Date.now(),r=new
 export function getActiveVoiceMembers(guildId:string){const now=Date.now();const out:{userId:string;channelId:string;joined:number;seconds:number;channelName?:string}[]=[];for(const [k,s] of active){const [g,u]=k.split(":");if(g===guildId)out.push({userId:u,channelId:s.channelId,joined:s.joined,seconds:Math.max(0,Math.floor((now-s.joined)/1000))});}return out;}
 export async function getVoiceStats(guildId:string,userId:string){const r=await collection<{counted_seconds?:number}>("voice_sessions").aggregate([{ $match:{guild_id:guildId,user_id:userId} },{ $group:{_id:null,total:{$sum:"$counted_seconds"}}}]).toArray();const s=active.get(key(guildId,userId));return Number(r[0]?.total||0)+(s?Math.max(0,Math.floor((Date.now()-s.joined)/1000)):0);}
 export async function resetActiveVoiceLeaderboard(guildId:string){const now=Date.now();for(const [k,s] of active){const [g]=k.split(":");if(g===guildId)s.joined=now;}await collection("voice_sessions").deleteMany({guild_id:guildId});await collection("activity_stats").updateMany({guild_id:guildId,period_type:"all"},{$set:{voice_seconds:0,updated_at:new Date()}});}
-export function registerVoice(client:Client){client.on(Events.VoiceStateUpdate,(o,n)=>handleVoice(o,n).catch(console.error));client.once(Events.ClientReady,()=>seedActiveVoice(client).catch(console.error));}
+export function registerVoice(client:Client){client.on(Events.VoiceStateUpdate,(o,n)=>handleVoice(o,n).catch(console.error));client.once(Events.ClientReady,()=>seedActiveVoice(client).catch(console.error));setInterval(()=>checkpointActiveVoice().catch(console.error),60_000);}
