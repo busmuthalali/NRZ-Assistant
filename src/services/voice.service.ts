@@ -2,12 +2,12 @@ import { Client, Events, Guild, VoiceState } from "discord.js";
 import { config } from "../config";
 import { collection } from "../db/database";
 
-type Active = { joined:number; channelId:string; selfMute:boolean; selfDeaf:boolean; serverMute:boolean; serverDeaf:boolean; streaming:boolean; camera:boolean };
+type Active = { joined:number; started:number; channelId:string; selfMute:boolean; selfDeaf:boolean; serverMute:boolean; serverDeaf:boolean; streaming:boolean; camera:boolean };
 const active = new Map<string, Active>();
 const activityListeners = new Set<(guild:Guild) => void | Promise<void>>();
 const key=(g:string,u:string)=>`${g}:${u}`;
 const isIgnored=(id:string|null)=>!id || config.ignoreVoiceChannelIds.has(id);
-function snapshot(state:VoiceState):Active { return {joined:Date.now(),channelId:state.channelId!,selfMute:state.selfMute ?? false,selfDeaf:state.selfDeaf ?? false,serverMute:state.serverMute ?? false,serverDeaf:state.serverDeaf ?? false,streaming:state.streaming ?? false,camera:state.selfVideo ?? false}; }
+function snapshot(state:VoiceState):Active { const now=Date.now();return {joined:now,started:now,channelId:state.channelId!,selfMute:state.selfMute ?? false,selfDeaf:state.selfDeaf ?? false,serverMute:state.serverMute ?? false,serverDeaf:state.serverDeaf ?? false,streaming:state.streaming ?? false,camera:state.selfVideo ?? false}; }
 
 export function onVoiceActivity(listener:(guild:Guild) => void | Promise<void>) {
   activityListeners.add(listener);
@@ -86,7 +86,7 @@ export function syncActiveVoice(guild:Guild){
 }
 export async function flushActiveVoice(){for(const [k,s] of active.entries()){const [g,u]=k.split(":");await persistSession(g,u,s).catch(e=>console.error("[Voice] shutdown save failed",e));}active.clear();}
 export function getActiveVoiceSeconds(guildId:string){const now=Date.now(),r=new Map<string,number>();for(const [k,s] of active){const [g,u]=k.split(":");if(g!==guildId)continue;r.set(u,(r.get(u)||0)+Math.max(0,Math.floor((now-s.joined)/1000)));}return r;}
-export function getActiveVoiceMembers(guildId:string){const now=Date.now();const out:{userId:string;channelId:string;joined:number;seconds:number;channelName?:string}[]=[];for(const [k,s] of active){const [g,u]=k.split(":");if(g===guildId)out.push({userId:u,channelId:s.channelId,joined:s.joined,seconds:Math.max(0,Math.floor((now-s.joined)/1000))});}return out;}
+export function getActiveVoiceMembers(guildId:string){const now=Date.now();const out:{userId:string;channelId:string;joined:number;seconds:number;channelName?:string}[]=[];for(const [k,s] of active){const [g,u]=k.split(":");if(g===guildId)out.push({userId:u,channelId:s.channelId,joined:s.started,seconds:Math.max(0,Math.floor((now-s.started)/1000))});}return out;}
 export async function getVoiceStats(guildId:string,userId:string){const r=await collection<{counted_seconds?:number}>("voice_sessions").aggregate([{ $match:{guild_id:guildId,user_id:userId} },{ $group:{_id:null,total:{$sum:"$counted_seconds"}}}]).toArray();const s=active.get(key(guildId,userId));return Number(r[0]?.total||0)+(s?Math.max(0,Math.floor((Date.now()-s.joined)/1000)):0);}
-export async function resetActiveVoiceLeaderboard(guildId:string){const now=Date.now();for(const [k,s] of active){const [g]=k.split(":");if(g===guildId)s.joined=now;}await collection("voice_sessions").deleteMany({guild_id:guildId});await collection("activity_stats").updateMany({guild_id:guildId,period_type:"all"},{$set:{voice_seconds:0,updated_at:new Date()}});}
+export async function resetActiveVoiceLeaderboard(guildId:string){const now=Date.now();for(const [k,s] of active){const [g]=k.split(":");if(g===guildId){s.joined=now;s.started=now;}}await collection("voice_sessions").deleteMany({guild_id:guildId});await collection("activity_stats").updateMany({guild_id:guildId,period_type:"all"},{$set:{voice_seconds:0,updated_at:new Date()}});}
 export function registerVoice(client:Client){client.on(Events.VoiceStateUpdate,(o,n)=>handleVoice(o,n).catch(console.error));client.once(Events.ClientReady,()=>seedActiveVoice(client).catch(console.error));setInterval(()=>checkpointActiveVoice().catch(console.error),60_000);}
