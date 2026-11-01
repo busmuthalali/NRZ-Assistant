@@ -3,10 +3,11 @@ import { collection } from "../db/database";
 
 export async function createTicket(interaction: any) {
   if (!interaction.guild) return interaction.reply({ content: "Tickets can only be created inside a server.", ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
 
   const existing = await collection<{channel_id:string}>("tickets").findOne({guild_id:interaction.guild.id,user_id:interaction.user.id,status:"open"});
   const existingChannel = existing?.channel_id ? interaction.guild.channels.cache.get(existing.channel_id) : null;
-  if (existingChannel) return interaction.reply({ content: `You already have an open ticket: <#${existingChannel.id}>`, ephemeral: true });
+  if (existingChannel) return interaction.editReply({ content: `You already have an open ticket: <#${existingChannel.id}>` });
 
   let category = interaction.guild.channels.cache.find((c: any) => c.type === ChannelType.GuildCategory && c.name === "🎫 TICKETS");
   if (!category) category = await interaction.guild.channels.create({ name: "🎫 TICKETS", type: ChannelType.GuildCategory });
@@ -27,7 +28,7 @@ export async function createTicket(interaction: any) {
     new ButtonBuilder().setCustomId("ticket_close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger)
   );
   await channel.send({ content: `🎫 Welcome <@${interaction.user.id}>! Please describe your issue.`, components: [row] });
-  return interaction.reply({ content: `Ticket created: <#${channel.id}>`, ephemeral: true });
+  return interaction.editReply({ content: `Ticket created: <#${channel.id}>` });
 }
 
 export async function handleTicketButton(interaction: Interaction) {

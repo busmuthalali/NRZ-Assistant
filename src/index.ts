@@ -35,7 +35,14 @@ async function main() {
     if (!i.isChatInputCommand()) return;
     await handleCommand(i as ChatInputCommandInteraction).catch(async e=>{
       console.error(e);
-      if (i.isRepliable() && !i.replied && !i.deferred) await i.reply({content:"An error occurred.",ephemeral:true}).catch(()=>{});
+      if (!i.isRepliable()) return;
+      try {
+        if (i.deferred) await i.editReply({content:"An error occurred."});
+        else if (i.replied) await i.followUp({content:"An error occurred.",ephemeral:true});
+        else await i.reply({content:"An error occurred.",ephemeral:true});
+      } catch (responseError) {
+        console.error("[Interaction] Could not send command error response:", responseError);
+      }
     });
   });
 
