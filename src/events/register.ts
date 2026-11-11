@@ -49,7 +49,7 @@ export function registerEvents(client:Client) {
       try {
         const profileName = newM.user.globalName ?? newM.user.username;
         const nickname = hasNrzRole
-          ? `NRZ | ${[...profileName].slice(0, 32 - "NRZ | ".length).join("")}`
+          ? `NRZ | ${[...profileName.toUpperCase()].slice(0, 32 - "NRZ | ".length).join("")}`
           : null;
         if (newM.nickname !== nickname) await newM.setNickname(nickname, "Synchronize nickname with NRZ role");
       } catch (error) {
