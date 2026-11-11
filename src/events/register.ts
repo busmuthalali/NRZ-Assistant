@@ -43,6 +43,18 @@ export function registerEvents(client:Client) {
     const rolesChanged = oldM.roles.cache.size !== newM.roles.cache.size ||
       [...oldM.roles.cache.keys()].some(roleId => !newM.roles.cache.has(roleId));
     if (rolesChanged) refreshVoiceLeaderboard(newM.guild, newM.id);
+    const hadNrzRole = oldM.roles.cache.some(role => role.name.trim().toLowerCase() === "nrz");
+    const hasNrzRole = newM.roles.cache.some(role => role.name.trim().toLowerCase() === "nrz");
+    if (hadNrzRole !== hasNrzRole) {
+      try {
+        const nickname = hasNrzRole
+          ? `NRZ | ${[...newM.user.username.toUpperCase()].slice(0, 32 - "NRZ | ".length).join("")}`
+          : null;
+        if (newM.nickname !== nickname) await newM.setNickname(nickname, "Synchronize nickname with NRZ role");
+      } catch (error) {
+        console.error(`[Members] Could not update NRZ nickname for ${newM.user.tag}:`, error);
+      }
+    }
     if (oldM.nickname!==newM.nickname) await logEvent(client,newM.guild.id,"NICKNAME_CHANGE",{targetId:newM.id,description:`${oldM.nickname ?? oldM.user.username} → ${newM.nickname ?? newM.user.username}`});
     if (oldM.roles.cache.size!==newM.roles.cache.size) await logEvent(client,newM.guild.id,"ROLE_CHANGE",{targetId:newM.id,description:`Roles changed for ${newM.user.tag}.`});
   });
