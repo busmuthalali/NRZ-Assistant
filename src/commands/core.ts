@@ -17,7 +17,7 @@ const fmt=(s:number)=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%
 const roles=(m:any)=>{const names=[...m.roles.cache.values()].map((r:any)=>String(r.name).toLowerCase());return {nrz:names.includes("nrz"),verified:names.includes("verified")};};
 
 async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMemberIds:string[]=[]){
-  if(metric==="voice") syncActiveVoice(guild);
+  if(metric==="voice") await syncActiveVoice(guild);
   const entries=await getLeaderboard(guild,metric,refreshMemberIds);
   const active=getActiveVoiceMembers(guild.id);
   const activeMap=new Map(active.map(x=>[x.userId,x]));
@@ -34,13 +34,15 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
   }
 
   const lines=(arr:any[])=>arr.map((e,i)=>{
-    const activeText=e.active?` — 🎙️ <#${e.active.channelId}> — **${fmt(e.active.seconds)}**`:"";
+    const status=e.active?`${e.active.muted?" 🙊":""}${e.active.deafened?" 🙉":""}`:"";
+    const activeText=e.active?` — 🎙️ <#${e.active.channelId}> — **${fmt(e.active.seconds)}**${status}`:"";
     return `**${i+1}.** <@${e.userId}> — **${metric==='voice'||metric==='fivem'?fmt(e.value):e.value.toLocaleString()}**${activeText}`;
   });
 
   const activeLines=active.map(x=>{
     const channel=guild.channels.cache.get(x.channelId);
-    return `• <@${x.userId}> — 🎙️ ${channel ? channel.name : `<#${x.channelId}>`} — **${fmt(x.seconds)}**`;
+    const status=`${x.muted?" 🙊 Muted":""}${x.deafened?" 🙉 Deafened":""}`;
+    return `• <@${x.userId}> — 🎙️ ${channel ? channel.name : `<#${x.channelId}>`} — **${fmt(x.seconds)}**${status}`;
   });
 
   const roleEmbed=(title:string,members:any[])=>{
