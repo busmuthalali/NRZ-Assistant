@@ -19,7 +19,11 @@ const roles=(m:any)=>{const names=[...m.roles.cache.values()].map((r:any)=>Strin
 async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMemberIds:string[]=[]){
   if(metric==="voice") await syncActiveVoice(guild);
   const entries=await getLeaderboard(guild,metric,refreshMemberIds);
-  const active=getActiveVoiceMembers(guild.id);
+  const verifiedOnlyVoiceUsers=new Set(entries.filter(e=>{
+    const names=[...e.member.roles.cache.values()].map((r:any)=>String(r.name).trim().toLowerCase());
+    return names.includes("verified")&&!names.includes("nrz");
+  }).map(e=>e.userId));
+  const active=getActiveVoiceMembers(guild.id).filter(x=>metric!=="voice"||!verifiedOnlyVoiceUsers.has(x.userId));
   const activeMap=new Map(active.map(x=>[x.userId,x]));
 
   // Only the two requested role groups. Members with both roles are placed in
@@ -30,7 +34,7 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
     const names=[...e.member.roles.cache.values()].map((r:any)=>String(r.name).trim().toLowerCase());
     const item={...e,active:activeMap.get(e.userId)};
     if(names.includes("nrz")) nrz.push(item);
-    else if(names.includes("verified")) verified.push(item);
+    else if(names.includes("verified")&&metric!=="voice") verified.push(item);
   }
 
   const lines=(arr:any[])=>arr.map((e,i)=>{
@@ -52,10 +56,8 @@ async function buildLeaderboard(guild:any,metric:LeaderboardMetric,refreshMember
     return new EmbedBuilder().setTitle(`${labels[metric]} - ${title}`).setDescription(description);
   };
 
-  const embeds=[
-    roleEmbed("🟥 NRZ Members",nrz),
-    roleEmbed("🟩 Verified Members",verified)
-  ];
+  const embeds=[roleEmbed("🟥 NRZ Members",nrz)];
+  if(metric!=="voice")embeds.push(roleEmbed("🟩 Verified Members",verified));
   if(metric==="voice"&&activeLines.length){
     let activeDescription=activeLines.join("\n");
     if(activeDescription.length>4096) activeDescription=activeDescription.slice(0,4090)+"\n…";
