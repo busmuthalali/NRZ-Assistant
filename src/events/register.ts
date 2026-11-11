@@ -47,7 +47,10 @@ export function registerEvents(client:Client) {
     const hasNrzRole = newM.roles.cache.some(role => role.name.trim().toLowerCase() === "nrz");
     if (hadNrzRole !== hasNrzRole) {
       try {
-        const nickname = hasNrzRole ? "NRZ |" : null;
+        const profileName = newM.user.globalName ?? newM.user.username;
+        const nickname = hasNrzRole
+          ? `NRZ | ${[...profileName].slice(0, 32 - "NRZ | ".length).join("")}`
+          : null;
         if (newM.nickname !== nickname) await newM.setNickname(nickname, "Synchronize nickname with NRZ role");
       } catch (error) {
         console.error(`[Members] Could not update NRZ nickname for ${newM.user.tag}:`, error);
